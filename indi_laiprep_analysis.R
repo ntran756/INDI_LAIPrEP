@@ -17,12 +17,13 @@ df <- read_csv(here("final_dta_20220327.csv")) |>
 # Recode socio-demographics for analysis ----
 df <- df |> 
   mutate(
-    race_4cat = factor(case_when(
+    race_cat = factor(case_when(
+      race == "Multiracial" & hisp_yn == "Yes" ~ 5, 
       race == "White" & hisp_yn == "No" ~ 4,
       race == "White" & hisp_yn == "Yes" ~ 3,
       str_detect(race, "Black") & hisp_yn == "No" ~ 2,
       str_detect(race, "Black") & hisp_yn == "Yes" ~ 1
-    ), labels = c("Black, Latino", "Black, non-Latino", "White, Latino", "White, non-Latino")),
+    ), labels = c("Black Latino", "Black non-Latino", "White Latino", "White non-Latino", "multiracial Latino")),
     age_grp = factor(case_when(
       age < 25 ~ 1, 
       age >= 25 & age < 29 ~ 2, 
@@ -162,7 +163,7 @@ v_fct_names <- discard(v_names, ~ .x %in% c("age", "indi_a", "indi_d", "indi_m")
 
 df_tab <- CreateTableOne(
   vars = v_names, 
-  strata = "race_4cat",
+  strata = "race_cat",
   data = df, 
   factorVars = v_fct_names, 
   includeNA = T, 
@@ -242,7 +243,7 @@ outcomes <- list(
 model_specs <- list(
   list(covariates = NULL),
   list(covariates = c("age", "I(age^2)", "educ_3cat", "employed", "income_3cat", 
-                      "sexor", "unstable_house", "race_4cat", "prep_know_sum"))
+                      "sexor", "unstable_house", "race_cat", "prep_know_sum"))
 )
 
 ### loop through functions to fit models and get outputs
@@ -276,18 +277,21 @@ df_reg <- df_reg |>
 # write.csv(df_reg, here("output", "table2b-regression_results.csv"), row.names = F)
 
 # Effect modification by race and ethnicity ----
+## Exclude multiracial Latino due to low reporting frequencies
+df <- df |> filter(race_cat != "multiracial Latino")
+
 ## fit model for LAI over daily oral
 ### anticipated discrimination 
-m1_a <- glm(prefer_inj_to_daily ~ indi_a_cat + race_4cat + age + I(age^2) + educ_3cat + employed + income_3cat + sexor + unstable_house + prep_know_sum, data = df, family = binomial())
-m2_a <- glm(prefer_inj_to_daily ~ indi_a_cat * race_4cat + age + I(age^2) + educ_3cat + employed + income_3cat + sexor + unstable_house + prep_know_sum, data = df, family = binomial())
+m1_a <- glm(prefer_inj_to_daily ~ indi_a_cat + race_cat + age + I(age^2) + educ_3cat + employed + income_3cat + sexor + unstable_house + prep_know_sum, data = df, family = binomial())
+m2_a <- glm(prefer_inj_to_daily ~ indi_a_cat * race_cat + age + I(age^2) + educ_3cat + employed + income_3cat + sexor + unstable_house + prep_know_sum, data = df, family = binomial())
 
 ### daily discrimination 
-m1_d <- glm(prefer_inj_to_daily ~ indi_d_cat + race_4cat + age + I(age^2) + educ_3cat + employed + income_3cat + sexor + unstable_house + prep_know_sum, data = df, family = binomial())
-m2_d <- glm(prefer_inj_to_daily ~ indi_d_cat * race_4cat + age + I(age^2) + educ_3cat + employed + income_3cat + sexor + unstable_house + prep_know_sum, data = df, family = binomial())
+m1_d <- glm(prefer_inj_to_daily ~ indi_d_cat + race_cat + age + I(age^2) + educ_3cat + employed + income_3cat + sexor + unstable_house + prep_know_sum, data = df, family = binomial())
+m2_d <- glm(prefer_inj_to_daily ~ indi_d_cat * race_cat + age + I(age^2) + educ_3cat + employed + income_3cat + sexor + unstable_house + prep_know_sum, data = df, family = binomial())
 
 ### major discrimination
-m1_m <- glm(prefer_inj_to_daily ~ indi_m_cat + race_4cat + age + I(age^2) + educ_3cat + employed + income_3cat + sexor + unstable_house + prep_know_sum, data = df, family = binomial())
-m2_m <- glm(prefer_inj_to_daily ~ indi_m_cat * race_4cat + age + I(age^2) + educ_3cat + employed + income_3cat + sexor + unstable_house + prep_know_sum, data = df, family = binomial())
+m1_m <- glm(prefer_inj_to_daily ~ indi_m_cat + race_cat + age + I(age^2) + educ_3cat + employed + income_3cat + sexor + unstable_house + prep_know_sum, data = df, family = binomial())
+m2_m <- glm(prefer_inj_to_daily ~ indi_m_cat * race_cat + age + I(age^2) + educ_3cat + employed + income_3cat + sexor + unstable_house + prep_know_sum, data = df, family = binomial())
 
 ### likelihood ratio test
 anova(m1_a, m2_a)
@@ -297,9 +301,9 @@ anova(m1_m, m2_m)
 ### combine results into a single table
 ### include robust standard errors
 df_int1 <- bind_rows(
-  avg_comparisons(m2_a, variables = "indi_a_cat", by = "race_4cat", vcov = "HC3", comparison = "lnratioavg", transform = "exp"),
-  avg_comparisons(m2_d, variables = "indi_d_cat", by = "race_4cat", vcov = "HC3", comparison = "lnratioavg", transform = "exp"),
-  avg_comparisons(m2_m, variables = "indi_m_cat", by = "race_4cat", vcov = "HC3", comparison = "lnratioavg", transform = "exp")
+  avg_comparisons(m2_a, variables = "indi_a_cat", by = "race_cat", vcov = "HC3", comparison = "lnratioavg", transform = "exp"),
+  avg_comparisons(m2_d, variables = "indi_d_cat", by = "race_cat", vcov = "HC3", comparison = "lnratioavg", transform = "exp"),
+  avg_comparisons(m2_m, variables = "indi_m_cat", by = "race_cat", vcov = "HC3", comparison = "lnratioavg", transform = "exp")
 ) 
 
 ### format table
@@ -311,21 +315,21 @@ df_int1 <- df_int1 |>
       round(conf.high, 2), ")"
     )
   ) |>
-  select(term, contrast, race_4cat, est) |>
-  pivot_wider(names_from = race_4cat, values_from = est)
+  select(term, contrast, race_cat, est) |>
+  pivot_wider(names_from = race_cat, values_from = est)
 
 ## fit model for LAI over on-demand
 ### anticipated discrimination 
-m1_a <- glm(prefer_inj_to_event ~ indi_a_cat + race_4cat + age + I(age^2) + educ_3cat + employed + income_3cat + sexor + unstable_house + prep_know_sum, data = df, family = binomial())
-m2_a <- glm(prefer_inj_to_event ~ indi_a_cat * race_4cat + age + I(age^2) + educ_3cat + employed + income_3cat + sexor + unstable_house + prep_know_sum, data = df, family = binomial())
+m1_a <- glm(prefer_inj_to_event ~ indi_a_cat + race_cat + age + I(age^2) + educ_3cat + employed + income_3cat + sexor + unstable_house + prep_know_sum, data = df, family = binomial())
+m2_a <- glm(prefer_inj_to_event ~ indi_a_cat * race_cat + age + I(age^2) + educ_3cat + employed + income_3cat + sexor + unstable_house + prep_know_sum, data = df, family = binomial())
 
 ### daily discrimination 
-m1_d <- glm(prefer_inj_to_event ~ indi_d_cat + race_4cat + age + I(age^2) + educ_3cat + employed + income_3cat + sexor + unstable_house + prep_know_sum, data = df, family = binomial())
-m2_d <- glm(prefer_inj_to_event ~ indi_d_cat * race_4cat + age + I(age^2) + educ_3cat + employed + income_3cat + sexor + unstable_house + prep_know_sum, data = df, family = binomial())
+m1_d <- glm(prefer_inj_to_event ~ indi_d_cat + race_cat + age + I(age^2) + educ_3cat + employed + income_3cat + sexor + unstable_house + prep_know_sum, data = df, family = binomial())
+m2_d <- glm(prefer_inj_to_event ~ indi_d_cat * race_cat + age + I(age^2) + educ_3cat + employed + income_3cat + sexor + unstable_house + prep_know_sum, data = df, family = binomial())
 
 ### major discrimiantion 
-m1_m <- glm(prefer_inj_to_event ~ indi_m_cat + race_4cat + age + I(age^2) + educ_3cat + employed + income_3cat + sexor + unstable_house + prep_know_sum, data = df, family = binomial())
-m2_m <- glm(prefer_inj_to_event ~ indi_m_cat * race_4cat + age + I(age^2) + educ_3cat + employed + income_3cat + sexor + unstable_house + prep_know_sum, data = df, family = binomial())
+m1_m <- glm(prefer_inj_to_event ~ indi_m_cat + race_cat + age + I(age^2) + educ_3cat + employed + income_3cat + sexor + unstable_house + prep_know_sum, data = df, family = binomial())
+m2_m <- glm(prefer_inj_to_event ~ indi_m_cat * race_cat + age + I(age^2) + educ_3cat + employed + income_3cat + sexor + unstable_house + prep_know_sum, data = df, family = binomial())
 
 ### likelihood ratio test
 anova(m1_a, m2_a)
@@ -335,9 +339,9 @@ anova(m1_m, m2_m)
 ### combine results into a single table
 ### include robust standard errors
 df_int2 <- bind_rows(
-  avg_comparisons(m2_a, variables = "indi_a_cat", by = "race_4cat", vcov = "HC3", comparison = "lnratioavg", transform = "exp"),
-  avg_comparisons(m2_d, variables = "indi_d_cat", by = "race_4cat", vcov = "HC3", comparison = "lnratioavg", transform = "exp"),
-  avg_comparisons(m2_m, variables = "indi_m_cat", by = "race_4cat", vcov = "HC3", comparison = "lnratioavg", transform = "exp")
+  avg_comparisons(m2_a, variables = "indi_a_cat", by = "race_cat", vcov = "HC3", comparison = "lnratioavg", transform = "exp"),
+  avg_comparisons(m2_d, variables = "indi_d_cat", by = "race_cat", vcov = "HC3", comparison = "lnratioavg", transform = "exp"),
+  avg_comparisons(m2_m, variables = "indi_m_cat", by = "race_cat", vcov = "HC3", comparison = "lnratioavg", transform = "exp")
 ) 
 
 # save results
@@ -353,8 +357,8 @@ df_int2 <- df_int2 |>
       round(conf.high, 2), ")"
     )
   ) |>
-  select(term, contrast, race_4cat, est) |>
-  pivot_wider(names_from = race_4cat, values_from = est)
+  select(term, contrast, race_cat, est) |>
+  pivot_wider(names_from = race_cat, values_from = est)
 
 # Supplemental: prep knowledge items by race and ethnicity ----
 v_names <- df |> 
@@ -363,7 +367,7 @@ v_names <- df |>
 
 df_tab <- CreateTableOne(
   vars = v_names, 
-  strata = "race_4cat",
+  strata = "race_cat",
   data = df, 
   factorVars = v_names, 
   includeNA = T, 
